@@ -1,0 +1,34 @@
+<link rel="import" href="../polymer/polymer.html">
+
+<!--
+`wf-chart`
+waveform chart
+
+@demo demo/index.html 
+-->
+
+<dom-module id="wf-chart">
+  <template>
+    <style>
+      :host {
+        display: block;
+      }
+    </style>
+    <h2>Hello [[prop1]]</h2>
+  </template>
+
+  <script>
+    Polymer({
+
+      is: 'wf-chart',
+
+      properties: {
+        prop1: {
+          type: String,
+          value: 'wf-chart',
+        },
+      },
+
+    });
+  </script>
+</dom-module>
