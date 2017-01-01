@@ -1,10 +1,11 @@
 <link rel="import" href="../polymer/polymer.html">
+<link rel="import" href="../d3-elements/d3-import.html">
 
 <!--
 `wf-chart`
 waveform chart
 
-@demo demo/index.html 
+@demo demo/index.html
 -->
 
 <dom-module id="wf-chart">
@@ -14,7 +15,27 @@ waveform chart
         display: block;
       }
     </style>
-    <h2>Hello [[prop1]]</h2>
+
+    <svg id="svg" width="[[width]]", height="[[height]]">
+      <defs>
+        <clipPath id="clip">
+          <rect width="[[clipWidth]]", height="[[clipHeight]]"/>
+        </clipPath>
+      </defs>
+      <rect class="background" x="0" y="0" width="[[width]]" height="[[height]]"/>
+      <g id="zoomer" transform="translate([[margin.left, margin.right]])">
+        <!-- Can these two g's be combined? -->
+        <g id="area" clip-path="url(#clip)">
+          <path id="areaPath" class="area"/>
+        </g>
+        <g id="line" clip-path="url(#clip)">
+          <path id="linePath" class="line"/>
+        </g>
+        <g id="xAxis" class="x axis" transform="translate(0, [[height]])"/>
+        <g id="yAxis" class="y axis"/>
+      </g>
+    </svg>
+
   </template>
 
   <script>
@@ -23,11 +44,156 @@ waveform chart
       is: 'wf-chart',
 
       properties: {
-        prop1: {
-          type: String,
-          value: 'wf-chart',
+        data: {
+          type: Array,
+        },
+
+        twin: Number,
+        tbin: Number,
+
+        margin: {
+          type: Object,
+          value: {top: 16, right: 5, bottom: 3, left: 50}
+        },
+
+        width: Number,
+        height: Number,
+
+        clipWidth: {
+          type: Number,
+          computed: 'computeClipWidth(width, margin.left, margin.right)'
+        },
+
+        clipHeight: {
+          type: Number,
+          computed: 'computeClipHeight(height, margin.top, margin.bottom)'
+        },
+
+        xScale: {
+          type: Object,
+          computed: 'computeXScale(width)'
+        },
+
+        yScale: {
+          type: Object,
+          computed: 'computeYScale(height)'
+        },
+
+        xAxis: {
+          type: Object,
+          computed: 'computeXAxis(xScale, height)'
+        },
+
+        yAxis: {
+          type: Object,
+          computed: 'computeYAxis(yScale, width)'
+        },
+
+        area: {
+          type: Object,
+          computed: 'computeArea(xScale, yScale)'
+        },
+
+        line: {
+          type: Object,
+          computed: 'computeLine(xScale, yScale)'
         },
       },
+
+      // observers: [
+      //   'svgSizeChanged(width, height, margin.*)',
+      // ],
+
+      // ready: function() {
+      // },
+
+      attached: function () {
+        d3.select("#areaPath").datum(this.data);
+        d3.select("#linePath").datum(this.data);
+        d3.select('#zoomer').call(this.zoom);
+      },
+
+      time_scaleLocalFormats: [
+          [d3.utcFormat("%Y"), function(d) { return true; }],
+          [d3.utcFormat("%B"), function(d) { return d.getUTCMonth(); }],
+          [d3.utcFormat("%b %d"), function(d) { return d.getUTCDate() != 1; }],
+          [d3.utcFormat("%a %d"), function(d) { return d.getUTCDay() && d.getUTCDate() != 1; }],
+          [d3.utcFormat("%H:%M"), function(d) { return d.getUTCHours(); }],
+          [d3.utcFormat("%H:%M"), function(d) { return d.getUTCMinutes(); }],
+          [d3.utcFormat(":%S"), function(d) { return d.getUTCSeconds(); }],
+          [d3.utcFormat(".%L"), function(d) { return d.getUTCMilliseconds(); }]
+      ],
+
+      d3_time_scaleFormat: function (formats) {
+        return function(date) {
+          var i = formats.length - 1, f = formats[i];
+          while (!f[1](date)) f = formats[--i];
+          return f[0](date);
+        };
+      },
+
+      computeClipWidth: function(width, marginLeft, marginRight) {
+        return width - marginLeft - marginRight;
+      },
+
+      computeClipHeight: function(height, marginTop, marginBottom) {
+        return height - marginTop - marginBottom;
+      },
+
+      computeXAxis: function(xScale, height) {
+        return d3.svg.axis().scale(xScale).orient('top')
+                  .tickSize(height)
+                  .tickFormat(this.d3_time_scaleFormat(this.time_scaleLocalFormats));
+      },
+
+      computeYAxis: function(width) {
+        return d3.svg.axis().scale(yScale).orient('left')
+                  .tickSize(-width);
+      },
+
+      computeXScale: function(width) {
+        return d3.time.scale.utc().range([0, width]);
+      },
+
+      computeYScale: function(width) {
+        return d3.scale.linear().range([height, 0]);
+      },
+
+      computeArea: function(xScale, yScale) {
+        return d3.svg.area()
+          .x(function(d) {
+            return xScale(d.timestamp);
+          })
+          .y0(function(d) {
+            return yScale(d.min);
+           })
+          .y1(function(d) {
+            return yScale(d.max);
+           });
+      },
+
+      computeLine: function(xScale, yScale) {
+        return d3.svg.line().interpolate('basis')
+          .x(function (d) {
+            return x(d.timestamp);
+          })
+          .y(function (d) {
+            return y(d.mean);
+          })
+      },
+
+      // svgSizeChanged: function(width, height, margin) {
+      // },
+
+      zoom: d3.zoom().on('zoom', function() {
+        this.dom(this.$.areaPath).setAttribute('d', this.area());
+        this.dom(this.$.linePath).setAttribute('d', this.line());
+        d3.select("#xAxis").call(this.xAxis);
+        this.scopeSubtree(this.xAxis, false);
+        d3.select("#yAxis").call(this.yAxis);
+        this.scopeSubtree(this.yAxis, false);
+      }),
+
 
     });
   </script>
