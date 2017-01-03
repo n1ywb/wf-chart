@@ -13,25 +13,71 @@ waveform chart
     <style>
       :host {
         display: block;
+        color: white;
       }
+      .axis {
+        fill: WhiteSmoke  ;
+      /*  opacity: 0.75; */
+      /*  font-weight:bold; */
+        /*background-color:black;  */
+      }
+      .axis path,
+      .axis line {
+        fill: none;
+        stroke: WhiteSmoke  ;
+        opacity: 1.0;
+        stroke-width: 1px;
+      /*  shape-rendering: crispEdges; */
+      }
+
+      .x.axis path {
+        display: none;
+      }
+
+      .area {
+        fill: Gold;
+      }
+
+      .line {
+        fill: none;
+        stroke: black;
+        stroke-width: 0.6px;
+      }
+
+      #background {
+        fill: darkblue;
+      }
+
+      .bar {
+        fill: yellow;
+        stroke: none;
+      /*  stroke: yellow;
+        stroke-width:0.2 */
+        shape-rendering: crispEdges;
+      /* opacity:0.4; */
+      }
+
+      .axis {
+        /*background-color:black;  */
+      }
+
+
     </style>
 
-    <svg id="svg" width="[[width]]", height="[[height]]">
-      <defs>
+    <svg id="svg">
+      <defs id="defs">
         <clipPath id="clip">
-          <rect width="[[clipWidth]]", height="[[clipHeight]]"/>
+          <rect id="clipRect"/>
         </clipPath>
       </defs>
-      <rect class="background" x="0" y="0" width="[[width]]" height="[[height]]"/>
-      <g id="zoomer" transform="translate([[margin.left, margin.right]])">
-        <!-- Can these two g's be combined? -->
-        <g id="area" clip-path="url(#clip)">
+      <rect id="background" x="0" y="0"/>
+      <g id="zoomer">
+        <!-- Can these two g's be combined? Or eliminated?-->
+        <g id="clipG" clip-path="url(#clip)">
           <path id="areaPath" class="area"/>
-        </g>
-        <g id="line" clip-path="url(#clip)">
           <path id="linePath" class="line"/>
         </g>
-        <g id="xAxis" class="x axis" transform="translate(0, [[height]])"/>
+        <g id="xAxis" class="x axis"/>
         <g id="yAxis" class="y axis"/>
       </g>
     </svg>
@@ -46,37 +92,68 @@ waveform chart
       properties: {
         data: {
           type: Array,
+          value: function() {return []}
         },
 
         twin: Number,
         tbin: Number,
 
-        margin: {
-          type: Object,
-          value: {top: 16, right: 5, bottom: 3, left: 50}
+        marginTop: {
+          type: Number,
+          value: 16,
+          observer: 'marginTopChanged'
         },
 
-        width: Number,
-        height: Number,
+        marginRight: {
+          type: Number,
+          value: 5,
+          observer: 'marginRightChanged'
+        },
+
+        marginBottom: {
+          type: Number,
+          value: 3,
+          observer: 'marginBottomChanged'
+        },
+
+        marginLeft: {
+          type: Number,
+          value: 50,
+          observer: 'marginLeftChanged'
+        },
+
+        width: {
+          type: Number,
+          value: 256,
+          observer: 'widthChanged'
+        },
+
+        height: {
+          type: Number,
+          value: 72,
+          observer: 'heightChanged'
+        },
 
         clipWidth: {
           type: Number,
-          computed: 'computeClipWidth(width, margin.left, margin.right)'
+          computed: 'computeClipWidth(width, marginLeft, marginRight)',
+          observer: 'clipWidthChanged'
         },
 
         clipHeight: {
           type: Number,
-          computed: 'computeClipHeight(height, margin.top, margin.bottom)'
+          computed: 'computeClipHeight(height, marginTop, marginBottom)',
+          observer: 'clipHeightChanged'
         },
 
         xScale: {
           type: Object,
-          computed: 'computeXScale(width)'
+          computed: 'computeXScale(clipWidth)'
         },
 
         yScale: {
           type: Object,
-          computed: 'computeYScale(height)'
+          computed: 'computeYScale(clipHeight)'
         },
 
         xAxis: {
@@ -98,19 +175,56 @@ waveform chart
           type: Object,
           computed: 'computeLine(xScale, yScale)'
         },
+
+        zoom: {
+          type: Object,
+          computed: 'computeZoom(area, line, xAxis, yAxis)'
+        }
       },
 
-      // observers: [
-      //   'svgSizeChanged(width, height, margin.*)',
-      // ],
+      observers: [
+        'marginLeftRightChanged(marginLeft, marginRight)',
+        'refresh(data, line, area, xScale, yScale, xAxis, yAxis, zoom)'
+      ],
 
       // ready: function() {
       // },
 
-      attached: function () {
-        d3.select("#areaPath").datum(this.data);
-        d3.select("#linePath").datum(this.data);
-        d3.select('#zoomer').call(this.zoom);
+      marginTopChanged: function (margin) {
+      },
+
+      marginRightChanged: function (margin) {
+      },
+
+      marginBottomChanged: function (margin) {
+      },
+
+      marginLeftChanged: function (margin) {
+      },
+
+      marginLeftRightChanged: function(left, right) {
+        Polymer.dom(this.$.zoomer).setAttribute(
+          'transform', "translate(" + left + "," + right + ")");
+      },
+
+      widthChanged: function (width) {
+        Polymer.dom(this.$.svg).setAttribute('width', width);
+        Polymer.dom(this.$.background).setAttribute('width', width);
+      },
+
+      heightChanged: function (height) {
+        Polymer.dom(this.$.svg).setAttribute('height', height);
+        Polymer.dom(this.$.background).setAttribute('height', height);
+        Polymer.dom(this.$.xAxis).setAttribute(
+          'transform', "translate(0, " + height + ")");
+      },
+
+      clipWidthChanged: function (clipWidth) {
+        Polymer.dom(this.$.clipRect).setAttribute('width', clipWidth);
+      },
+
+      clipHeightChanged: function (clipHeight) {
+        Polymer.dom(this.$.clipRect).setAttribute('height', clipHeight);
       },
 
       time_scaleLocalFormats: [
@@ -141,26 +255,27 @@ waveform chart
       },
 
       computeXAxis: function(xScale, height) {
-        return d3.svg.axis().scale(xScale).orient('top')
+        return d3.axisTop().scale(xScale)
                   .tickSize(height)
                   .tickFormat(this.d3_time_scaleFormat(this.time_scaleLocalFormats));
       },
 
-      computeYAxis: function(width) {
-        return d3.svg.axis().scale(yScale).orient('left')
+      computeYAxis: function(yScale, width) {
+        return d3.axisLeft().scale(yScale)
                   .tickSize(-width);
       },
 
       computeXScale: function(width) {
-        return d3.time.scale.utc().range([0, width]);
+        return d3.scaleUtc().range([0, width]);
       },
 
-      computeYScale: function(width) {
-        return d3.scale.linear().range([height, 0]);
+      computeYScale: function(height) {
+        return d3.scaleLinear().range([height, 0]);
       },
 
       computeArea: function(xScale, yScale) {
-        return d3.svg.area()
+        return d3.area()
+          .curve(d3.curveStep)
           .x(function(d) {
             return xScale(d.timestamp);
           })
@@ -173,28 +288,49 @@ waveform chart
       },
 
       computeLine: function(xScale, yScale) {
-        return d3.svg.line().interpolate('basis')
+        return d3.line()
+          .curve(d3.curveBasis)
           .x(function (d) {
-            return x(d.timestamp);
+            return xScale(d.timestamp);
           })
           .y(function (d) {
-            return y(d.mean);
+            return yScale(d.mean);
           })
+      },
+
+      redraw: function (data, line, area, xScale, yScale, xAxis, yAxis) {
+        Polymer.dom(this.$.areaPath).setAttribute('d', area(data))
+        Polymer.dom(this.$.linePath).setAttribute('d', line(data))
+        yAxis.tickValues(yScale.ticks(3));
+        d3.select('#xAxis').call(xAxis);
+        this.scopeSubtree(this.$.xAxis, false);
+        d3.select('#yAxis').call(yAxis);
+        this.scopeSubtree(this.$.yAxis, false);
+      },
+
+      refresh: function (data, line, area, xScale, yScale, xAxis, yAxis, zoom) {
+        xScale.domain([data[0].timestamp, data[data.length-1].timestamp]);
+        yScale.domain([ d3.min(data, function(d) { return d.min; }),
+                        d3.max(data, function(d) { return d.max; }) ]);
+        // zoom.x(xScale);
+        this.redraw(data, line, area, xScale, yScale, xAxis, yAxis, zoom);
+      },
+
+      computeZoom: function(data, area, line, xAxis, yAxis, xScale, yScale) {
+        // return d3.zoom().on('zoom', function() {
+        //   this.redraw(data, area, line, xAxis, yAxis, xScale, yScale);
+        // });
+        return 1;
       },
 
       // svgSizeChanged: function(width, height, margin) {
       // },
 
-      zoom: d3.zoom().on('zoom', function() {
-        this.dom(this.$.areaPath).setAttribute('d', this.area());
-        this.dom(this.$.linePath).setAttribute('d', this.line());
-        d3.select("#xAxis").call(this.xAxis);
-        this.scopeSubtree(this.xAxis, false);
-        d3.select("#yAxis").call(this.yAxis);
-        this.scopeSubtree(this.yAxis, false);
-      }),
-
-
+      attached: function () {
+        // this.zoom(this.$.zoomer);
+        this.redraw(this.data, this.line, this.area, this.xScale,
+          this.yScale, this.xAxis, this.yAxis);
+      },
     });
   </script>
 </dom-module>
